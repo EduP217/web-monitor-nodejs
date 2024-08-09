@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Website Monitor</title>
+    <link rel="stylesheet" href="public/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="public/css/styles.css" />
+</head>
+<body>
+    <h1>Website Monitor</h1>
+    <form>
+        <div class="form-group">
+            <label for="url">Website URL</label>
+            <input type="text" id="url" name="url" placeholder="Enter website URL" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="checkInterval">Interval Time</label>
+            <div class="row">
+                <div class="col-md-8">
+                    <input type="number" id="checkInterval" placeholder="Enter the checking interval time" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <select id="intervalType" class="custom-select">
+                        <option value="seconds">Seconds</option>
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </form>
+    <button id="checkButton" class="btn btn-info">Check Website</button>
+    <div class="pt-3">
+        <table id="monitorTable" class="table table-bordered">
+            <thead>
+                <tr>
+                    <th style="width: 10%;">ID</th>
+                    <th style="width: 20%;">URL</th>
+                    <th style="width: 15%;">Status</th>
+                    <th style="width: 25%;">Last Checked</th>
+                    <th style="width: 25%;">Last Result</th>
+                    <th style="width: 5%;"></th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <template id="rowTemplate">
+            <tr>
+                <td class="id"></td>
+                <td class="url"></td>
+                <td class="status"></td>
+                <td class="lastCheck"></td>
+                <td class="lastResult"></td>
+                <td class="options"></td>
+            </tr>
+        </template>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        document.addEventListener("DOMContentLoaded", refreshTable());
+
+        document.getElementById('checkButton').addEventListener('click', async () => {
+            const url = document.getElementById('url').value;
+            const checkInterval = document.getElementById('checkInterval').value;
+            const intervalType = document.getElementById('intervalType').value;
+            
+            const result = await ipcRenderer.invoke('check-website', url, checkInterval, intervalType);
+            if(result) refreshTable();
+            clearInputs();
+        });
+
+        ipcRenderer.on('refresh-item', (event, item) => {
+            updateRow(item);
+        });
+
+        function clearInputs() {
+            document.getElementById('url').value = '';
+            document.getElementById('checkInterval').value = '';
+        }
+
+        async function refreshTable() {
+            cleanTable();
+            const result = await ipcRenderer.invoke('list-monitoring');
+            result.forEach(d => {
+                insertNewRow(d);
+            });
+        }
+
+        function cleanTable() {
+            document.getElementById('monitorTable').querySelector('tbody').innerHTML = '';
+        }
+
+        function insertNewRow(d) {
+            const template = document.getElementById('rowTemplate');
+            const clone = template.content.cloneNode(true);
+            clone.querySelector('tr').setAttribute('data-id', d.id);
+            clone.querySelector('.id').textContent = d.id;
+            clone.querySelector('.url').textContent = d.url;
+            clone.querySelector('.status').textContent = d.state;
+            clone.querySelector('.lastCheck').textContent = d.updatedAt.toISOString();
+            clone.querySelector('.lastResult').textContent = d.lastResult;
+            clone.querySelector('.options').innerHTML = "<button class='btn btn-danger text-white' onClick='deleteRow("+d.id+")'>X</button>";
+
+            document.getElementById('monitorTable').querySelector('tbody').appendChild(clone);
+        }
+
+        function updateRow(d) {
+            const row = document.getElementById('monitorTable').querySelector('tbody').querySelector(`tr[data-id="${d.id}"]`);
+            row.querySelector('.status').textContent = d.state;
+            row.querySelector('.lastCheck').textContent = d.updatedAt.toISOString();
+            row.querySelector('.lastResult').textContent = d.lastResult;
+        }
+
+        async function deleteRow(id) {
+            const result = await ipcRenderer.invoke('remove-url', id);
+            if(result) {
+                const row = document.getElementById('monitorTable').querySelector('tbody').querySelector(`tr[data-id="${id}"]`);
+                row.parentNode.removeChild(row);
+            };
+        }
+    </script>
+</body>
+</html>
